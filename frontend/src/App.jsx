@@ -334,6 +334,7 @@ export default function App() {
         {notice && <div className="banner success" role="status"><Icon name="check" /><span>{notice}</span><button className="icon-btn" onClick={() => setNotice('')} aria-label="Dismiss notification"><Icon name="close" size={16} /></button></div>}
         {!!Object.keys(errors).length && <div className="banner danger" role="alert"><Icon name="info" /><div><strong>Some data is unavailable. Previously loaded records may be out of date.</strong>{Object.entries(errors).map(([key, error]) => <p key={key}>{human(key)}: {error}</p>)}</div><Button disabled={loading} onClick={loadData}>Retry</Button></div>}
         {activePage === 'operations' && <>
+          <CareBanner />
           <div className="live-ops-strip">
             <div><span className="live-pulse" /><strong>Live simulation active</strong><span>Auto-refreshes every 60 seconds</span></div>
             <div className="live-stat"><span>New referrals today</span><strong>{fmt(referralsToday)}</strong></div>
@@ -604,4 +605,116 @@ function ResolveForm({
     e.preventDefault();
     if (reason.trim() && !busy) onResolve(reason.trim());
   }}><div className="record-badges"><Badge>{record.severity}</Badge><Badge>{record.status}</Badge></div><h3 className="resolution-title">{human(record.alert_type)}</h3><dl className="detail-grid"><Detail label="Alert ID" value={record.alert_id} /><Detail label="Case ID" value={record.case_id} /><Detail label="Assigned role" value={record.assigned_role} /><Detail label="Created" value={stamp(record.created_at)} /></dl><div className="scope-note"><Icon name="info" /><span>Resolve only after reviewing the underlying issue. This action submits a resolution reason to the API as Team Leader.</span></div><Field label="Resolution reason"><textarea autoFocus required disabled={busy} value={reason} onChange={e => setReason(e.target.value)} placeholder="What was reviewed, what action was taken, and why can this alert be closed?" maxLength={2000} /></Field><div className="modal-actions"><Button type="button" onClick={onCancel} disabled={busy}>Cancel</Button><Button variant="primary" icon="check" type="submit" disabled={busy || !reason.trim()}>{busy ? 'Resolving…' : 'Confirm resolution'}</Button></div></form>;
+}
+
+// Decorative imagery only: these fictional people are not linked to case records.
+const CARE_SLIDES = [
+  { file: 'drawing.png', label: 'Drawing together', position: '62% 43%' },
+  { file: 'playing.png', label: 'Playing together', position: '50% 45%' },
+  { file: 'reading.png', label: 'Learning together', position: '62% 40%' },
+];
+
+function CareBanner() {
+  const [active, setActive] = useState(0);
+  const [ready, setReady] = useState(() => CARE_SLIDES.map(() => false));
+  const [paused, setPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(true);
+  const [hidden, setHidden] = useState(false);
+  const headingId = useId();
+  const shown = ready[active] ? active : ready.findIndex(Boolean);
+  const availableCount = ready.filter(Boolean).length;
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const syncPreference = () => setReducedMotion(preference.matches);
+    const syncVisibility = () => setHidden(document.hidden);
+    syncPreference();
+    syncVisibility();
+    preference.addEventListener('change', syncPreference);
+    document.addEventListener('visibilitychange', syncVisibility);
+    return () => {
+      preference.removeEventListener('change', syncPreference);
+      document.removeEventListener('visibilitychange', syncVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (paused || reducedMotion || hidden || availableCount < 2) return;
+    // 1.5-second crossfade followed by approximately 6 seconds at rest.
+    const timer = window.setInterval(() => {
+      setActive(current => {
+        const from = ready[current] ? current : ready.findIndex(Boolean);
+        for (let step = 1; step <= CARE_SLIDES.length; step++) {
+          const next = (from + step) % CARE_SLIDES.length;
+          if (ready[next]) return next;
+        }
+        return current;
+      });
+    }, 7500);
+    return () => window.clearInterval(timer);
+  }, [paused, reducedMotion, hidden, ready, availableCount]);
+
+  function imageReady(index, value) {
+    setReady(previous => {
+      if (previous[index] === value) return previous;
+      const next = [...previous];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  return (
+    <section className="sq-care-banner" aria-labelledby={headingId}>
+      <div className="sq-care-copy">
+        <p className="sq-care-eyebrow">CARE BEGINS WITH ATTENTION</p>
+        <h2 id={headingId}>Every case represents<br />a childhood.</h2>
+        <p className="sq-care-description">Bring clarity to urgent work. Make space for better care.</p>
+      </div>
+      <div className="sq-care-visual" aria-hidden="true">
+        {CARE_SLIDES.map((slide, index) => (
+          <img
+            key={slide.file}
+            src={`${import.meta.env.BASE_URL || '/'}images/safequeue/${slide.file}`}
+            alt=""
+            width="1536"
+            height="1024"
+            loading="eager"
+            decoding="async"
+            className={`sq-care-image${shown === index ? ' is-visible' : ''}`}
+            style={{ objectPosition: slide.position }}
+            onLoad={() => imageReady(index, true)}
+            onError={() => imageReady(index, false)}
+          />
+        ))}
+      </div>
+      {availableCount > 1 && (
+        <div className="sq-care-controls" role="group" aria-label="Care banner images">
+          {!reducedMotion && (
+            <button
+              type="button"
+              className="sq-care-pause"
+              onClick={() => setPaused(value => !value)}
+              aria-label={paused ? 'Play care slideshow' : 'Pause care slideshow'}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                {paused ? <path d="M3 1.5 10 6 3 10.5Z" /> : <><rect x="2" y="2" width="3" height="8" rx=".5" /><rect x="7" y="2" width="3" height="8" rx=".5" /></>}
+              </svg>
+              {paused ? 'Play' : 'Pause'}
+            </button>
+          )}
+          {CARE_SLIDES.map((slide, index) => (
+            <button
+              key={slide.file}
+              type="button"
+              className={`sq-care-dot${shown === index ? ' is-selected' : ''}`}
+              disabled={!ready[index]}
+              aria-label={`Show ${slide.label.toLowerCase()}`}
+              aria-pressed={shown === index}
+              onClick={() => { setActive(index); setPaused(true); }}
+            ><span /></button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
