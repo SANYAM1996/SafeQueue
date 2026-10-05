@@ -1,18 +1,19 @@
 from fastapi import FastAPI, HTTPException, Header, Query
-import os
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timezone
+import os
+import shutil
 
 from permissions import Role, Action, require_permission, permission_summary
 
 
 app = FastAPI(
     title="SafeQueue API",
-    version="0.2.2",
+    version="0.2.3",
     description="Prototype child-welfare case monitoring and governance API using synthetic data."
 )
 
@@ -27,16 +28,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------
+# Persistent data setup
+# ---------------------------------------------------------
+
+SOURCE_DATA_DIR = Path("data")
 DATA_DIR = Path(os.getenv("SAFEQUEUE_DATA_DIR", "data"))
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+SEED_FILES = [
+    "safequeue_synthetic_cases_v1.csv",
+    "safequeue_alerts_v1.csv",
+]
+
+for filename in SEED_FILES:
+    source = SOURCE_DATA_DIR / filename
+    target = DATA_DIR / filename
+
+    if not target.exists():
+        if not source.exists():
+            raise FileNotFoundError(f"Missing seed file: {source}")
+
+        shutil.copy2(source, target)
+        print(f"Seeded persistent data file: {target}")
+
+
 CASES_FILE = DATA_DIR / "safequeue_synthetic_cases_v1.csv"
 ALERTS_FILE = DATA_DIR / "safequeue_alerts_v1.csv"
 AUDIT_FILE = DATA_DIR / "runtime_audit_log.csv"
 
-
-
 cases_df = pd.read_csv(CASES_FILE)
 alerts_df = pd.read_csv(ALERTS_FILE)
 
+
+# ---------------------------------------------------------
+# Request models
+# ---------------------------------------------------------
 
 class StatusUpdate(BaseModel):
     status: str
@@ -58,6 +88,10 @@ class AlertResolution(BaseModel):
     reason: str
 
 
+# ---------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------
+
 def parse_role(x_role: str) -> Role:
     try:
         return Role(x_role)
@@ -69,9 +103,6 @@ def parse_role(x_role: str) -> Role:
 
 
 def enforce_permission(role: Role, action: Action) -> None:
-    """
-    Convert internal RBAC PermissionError into a clean HTTP 403 response.
-    """
     try:
         require_permission(role, action)
     except PermissionError as exc:
@@ -106,9 +137,12 @@ def write_audit(
     if AUDIT_FILE.exists():
         row.to_csv(AUDIT_FILE, mode="a", header=False, index=False)
     else:
-        AUDIT_FILE.parent.mkdir(parents=True, exist_ok=True)
         row.to_csv(AUDIT_FILE, index=False)
 
+
+# ---------------------------------------------------------
+# Health / summary
+# ---------------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -116,6 +150,7 @@ def health():
         "status": "ok",
         "cases_loaded": int(len(cases_df)),
         "alerts_loaded": int(len(alerts_df)),
+        "data_dir": str(DATA_DIR),
     }
 
 
@@ -146,6 +181,10 @@ def get_summary():
 def get_permissions():
     return permission_summary()
 
+
+# ---------------------------------------------------------
+# Cases
+# ---------------------------------------------------------
 
 @app.get("/cases")
 def list_cases(
@@ -324,6 +363,10 @@ def assign_worker(
     }
 
 
+# ---------------------------------------------------------
+# Alerts
+# ---------------------------------------------------------
+
 @app.get("/alerts")
 def list_alerts(
     limit: int = Query(50, ge=1, le=500),
@@ -402,6 +445,10 @@ def resolve_alert(
         "message": "Alert resolved and audit event recorded.",
     }
 
+
+# ---------------------------------------------------------
+# Audit
+# ---------------------------------------------------------
 
 @app.get("/audit")
 def get_audit_log(
