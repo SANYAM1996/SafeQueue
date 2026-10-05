@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Header, Query
+import os
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -25,10 +26,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+DATA_DIR = Path(os.getenv("SAFEQUEUE_DATA_DIR", "data"))
+CASES_FILE = DATA_DIR / "safequeue_synthetic_cases_v1.csv"
+ALERTS_FILE = DATA_DIR / "safequeue_alerts_v1.csv"
+AUDIT_FILE = DATA_DIR / "runtime_audit_log.csv"
 
-CASES_FILE = Path("data/safequeue_synthetic_cases_v1.csv")
-ALERTS_FILE = Path("data/safequeue_alerts_v1.csv")
-AUDIT_FILE = Path("data/runtime_audit_log.csv")
+
 
 cases_df = pd.read_csv(CASES_FILE)
 alerts_df = pd.read_csv(ALERTS_FILE)
