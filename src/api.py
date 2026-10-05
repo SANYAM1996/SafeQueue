@@ -15,7 +15,7 @@ from permissions import Role, Action, require_permission, permission_summary
 
 app = FastAPI(
     title="SafeQueue API",
-    version="0.3.0",
+    version="0.3.1",
     description="Prototype child-welfare case monitoring and governance API using synthetic data."
 )
 
