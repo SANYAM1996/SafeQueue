@@ -1,16 +1,22 @@
-name: Build SafeQueue API
+name: SafeQueue Backend CI/CD
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "src/**"
+      - "data/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/deploy-backend.yml"
 
 permissions:
   contents: read
   packages: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,4 +35,13 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/sanyam1996/safequeue-api:latest
+          tags: |
+            ghcr.io/sanyam1996/safequeue-api:latest
+            ghcr.io/sanyam1996/safequeue-api:${{ github.sha }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: safequeue-api
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          images: ghcr.io/sanyam1996/safequeue-api:${{ github.sha }}
