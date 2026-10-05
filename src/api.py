@@ -535,6 +535,7 @@ def assign_worker(
 
     cases_df.at[idx, "assigned_worker"] = body.worker_id
     cases_df.at[idx, "allocation_status"] = "Allocated"
+    cases_df.at[idx, "event_type"] = "WORKER_ASSIGNED"
     cases_df.to_csv(CASES_FILE, index=False)
 
     write_audit(
